@@ -78,7 +78,6 @@ def traduzir_texto_seguro(texto: str, idioma_origem: str, idioma_destino: str, e
     for bloco in blocos:
         try:
             time.sleep(1.0)
-            # Agora usamos o e-mail fornecido dinamicamente pelo usuário ou o padrão anônimo
             tradutor = MyMemoryTranslator(source=idioma_origem, target=idioma_destino, email=email_api)
             resultado = tradutor.translate(bloco)
             if resultado:
@@ -100,9 +99,24 @@ def processar_e_traduzir_paragrafo(paragrafo, origem: str, destino: str, email_a
     texto_traduzido = traduzir_texto_seguro(texto_completo, origem, destino, email_api)
     
     if paragrafo.runs:
-        paragrafo.runs.text = texto_traduzido
-        for run in paragrafo.runs[1:]:
-            run.text = ""
+        run_alvo = None
+        for run in paragrafo.runs:
+            # Proteção estrita: Não tocamos nem limpamos runs com mídias ou formas geométricas
+            if "drawing" in run._r.xml or "blip" in run._r.xml:
+                continue
+            
+            # Se o run tiver texto legível
+            if run.text.strip() or run.text:
+                if run_alvo is None:
+                    run_alvo = run
+                    run_alvo.text = texto_traduzido
+                else:
+                    # Esvazia apenas textos secundários duplicados
+                    run.text = ""
+                    
+        # Fallback de segurança se todos os runs forem tags complexas mas o parágrafo contiver texto
+        if run_alvo is None and len(paragrafo.runs) > 0:
+            paragrafo.runs[0].text = texto_traduzido
             
     return contagem_palavras
 
@@ -166,7 +180,6 @@ idioma_destino = st.sidebar.selectbox(
 st.sidebar.divider()
 st.sidebar.markdown("### 🔐 Credenciais da API")
 
-# Campo input para cada usuário definir seu e-mail (Opção 2)
 email_usuario = st.sidebar.text_input(
     "E-mail para cota premium (Recomendado)",
     value="seu_email@exemplo.com",
@@ -187,7 +200,7 @@ if st.sidebar.button("🔍 Testar Linha de Conexão", use_container_width=True):
 # Interface Gráfica — Tela Principal
 # --------------------------------------------------------------------------- #
 st.markdown("<div class='main-title'>🌐 DocTranslate Pro</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>Traduza arquivos Word mantendo o design intacto e com alta estabilidade de rede.</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>Traduza arquivos Word mantendo o design, tabelas e logotipos intactos.</div>", unsafe_allow_html=True)
 
 arquivo_enviado = st.file_uploader("", type=["docx"])
 
@@ -199,7 +212,6 @@ if arquivo_enviado is not None:
         
     if st.button("🚀 Iniciar Tradução Inteligente", type="primary", use_container_width=True):
         try:
-            # Enviamos o e-mail digitado no input para dentro da esteira de tradução
             documento_pronto, n_paragrafos, n_palavras = traduzir_documento_completo(
                 arquivo_enviado, idioma_origem, idioma_destino, email_usuario
             )
@@ -221,4 +233,4 @@ if arquivo_enviado is not None:
         except Exception as erro:
             st.error(f"Falha operacional interna: {erro}")
 else:
-    st.info("💡 Envie um arquivo formatado in .docx para iniciar a esteira de tradução.")
+    st.info("💡 Envie um arquivo formatado em .docx para iniciar a esteira de tradução.")
